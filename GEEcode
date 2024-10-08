@@ -1,0 +1,63 @@
+// Define the area of interest (AOI) as a geometry. Replace with your AOI.
+var aoi = ee.Geometry.Polygon([
+  [[-90.073, 35.139], [-90.073, 35.154], [-90.041, 35.154], [-90.041, 35.139]]
+]);
+
+// Define the time period for image collection.
+var startDate = '2023-01-01'; // Replace with your start date
+var endDate = '2023-12-31'; // Replace with your end date
+
+// Define the maximum cloud cover percentage.
+var maxCloudCover = 20; // Replace with your desired cloud cover percentage
+
+// Load Sentinel-2 imagery.
+var sentinel2 = ee.ImageCollection('COPERNICUS/S2')
+  .filterDate(startDate, endDate)
+  .filterBounds(aoi)
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', maxCloudCover));
+
+// Function to calculate NDVI.
+var addNDVI = function(image) {
+  var ndvi = image.normalizedDifference(['B8', 'B4']).rename('NDVI');
+  return image.addBands(ndvi);
+};
+
+// Map the NDVI calculation over the collection.
+var sentinel2WithNDVI = sentinel2.map(addNDVI);
+
+// Get the median image to reduce cloud effects.
+var medianImage = sentinel2WithNDVI.median();
+
+// Create a false color composite (NIR, Red, Green).
+var falseColorComposite = medianImage.select(['B8', 'B4', 'B3']);
+
+// Define visualization parameters for the false color composite.
+var falseColorVis = {
+  min: 0,
+  max: 3000,
+  gamma: 1.4,
+};
+
+// Add the false color composite to the map.
+Map.centerObject(aoi, 8);
+Map.addLayer(falseColorComposite, falseColorVis, 'False Color Composite');
+
+// Export the false color composite and NDVI.
+Export.image.toDrive({
+  image: falseColorComposite,
+  description: 'False_Color_Composite',
+  scale: 10,
+  region: aoi,
+  fileFormat: 'GeoTIFF',
+  maxPixels: 1e13
+});
+
+Export.image.toDrive({
+  image: medianImage.select('NDVI'),
+  description: 'NDVI_Image',
+  scale: 10,
+  region: aoi,
+  fileFormat: 'GeoTIFF',
+  maxPixels: 1e13
+});
+
